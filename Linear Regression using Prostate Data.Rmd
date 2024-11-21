@@ -1,0 +1,152 @@
+---
+title: "Linear Regression using Prostate Data"
+author: "Disha Deepesh Tandon"
+date: "2024-09-23"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---   
+# Linear Regression
+Today, we will be using "Prostate Data" that was collected from patients with prostate cancer to create a model that will predict the value of psa based on other features in the data. It has been observed, psa, which is antigen, is elevated in the presence of prostate cancer.
+
+## Setup Chunk
+I begin with setting up the environment for the analysis. It loads several useful libraries:
+ggplot2 (for visualizations), 
+dplyr (for data manipulation), 
+broom (for tidying model outputs), 
+and leaps (for performing regression subset selection). 
+It also suppresses warnings and messages in the output.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(dplyr)
+library(broom)
+library(leaps)
+```
+
+## Loading the Data
+The chunk below loads the prostate cancer dataset from ProstateData.csv and displays its structure using the str() function. This gives an overview of the variables in the dataset and their data types.
+
+```{r data}
+d = read.csv('ProstateData.csv')
+str(d)
+```
+
+## Converting the svi variable to a Factor
+```{r categorical}
+# Calling the dplyr operator with our data
+d = d %>%
+  mutate(svi = factor(svi, label=c("sviO", "svi1")))
+str(d)
+
+```
+The mutate() function from the dplyr package is used to convert the svi variable in the dataset d into a factor. The factor() function assigns two labels: "sviO" and "svi1", corresponding to the original categories or values in svi. This is an important step because factors are R’s way of dealing with categorical variables, which is useful for modeling or performing categorical data analysis.
+Following the transformation, the str() function is called to display the updated structure of the dataset, verifying that svi has been successfully converted to a factor with the correct labels. This helps ensure that the variable is properly formatted for further statistical analysis or visualization.
+
+```{r cat1}
+# Check how many levels you have since you turned it to categorical
+contrasts(d$svi)
+```
+I checked the factor levels of svi using contrasts(d$svi) to confirm that the transformation was successful and to view the contrast matrix of the categorical variable.
+
+## Distribution Plot
+```{r dist}
+d %>%
+  ggplot(aes(sample = lpsa)) +
+  geom_qq()
+
+```
+ I generated a Q-Q plot of lpsa using geom_qq() from ggplot2 to visually assess whether the distribution of lpsa is approximately normal, which is useful for later statistical analyses.
+
+## Correlation Matrix (Excluding svi and train)
+Next, let's look at relationships
+```{r relationships}
+d %>%
+  select(-svi, -train) %>%
+  cor()
+```
+Then,I computed the correlation matrix for the numerical variables in the dataset (excluding svi and train) to explore relationships between the continuous variables and check for multicollinearity.
+
+
+## Boxplot of svi and lpsa
+```{r catRelations}
+d %>%
+  ggplot(aes(x=svi, y=lpsa, fill = svi)) +
+  geom_boxplot()
+```
+
+Here, I created a boxplot to compare the distribution of lpsa between the two categories of svi. This helps visualize how lpsa varies between these groups, which could suggest a potential relationship.
+
+## Statistical Test: T-Test for lpsa Across svi
+``` {r statTest}
+library(broom)
+d %>%
+  do(tidy(t.test(lpsa~svi, data = .))) %>%
+  select(p.value)
+```
+
+Next,I performed a t-test to determine whether the mean lpsa differs significantly between the two levels of svi. I use the broom package's tidy() function to clean the output and extract the p-value to assess the test's significance.
+
+## Splitting the Dataset into Training and Testing Sets
+```{r splitData}
+trainD = d %>%
+  filter(train == T) %>%
+  select(-train)
+testD = d %>%
+  filter(train == F) %>%
+  select(-train)
+
+```
+
+I split the dataset into training and testing sets using the train variable. This is important for building and evaluating the predictive model. I also remove the train variable after splitting.
+
+## Building a Forward Selection Model
+We will begin building a model
+```{r buildingModel}
+library(leaps)
+
+model = regsubsets(lpsa ~ . , data = trainD, method = "forward")
+summary(model)
+```
+
+I'm utilizing other factors from the training dataset 'trainD' to create a regression model to predict 'lpsa'. This seeks to determine which predictors have the greatest influence in explaining the variability of 'lpsa'.
+
+## Difference between Exhaustive and Forward method
+The "exhaustive" approach considers every potential subset in order to identify the best one, whereas the "forward" method adds predictors progressively depending on improvements in model fit. Extensive selection ensures optimality but can be computationally costly, whereas forward selection is computationally efficient but may not always discover the ideal subset.
+
+
+## Viewing Adjusted R-Squared Values for Each Model
+```{r modelMetics}
+# View adjusted R-square value of each model
+summary(model)$adjr2
+```
+Furthermore,  I extracted the adjusted R-squared values from each model generated during forward selection. Adjusted R-squared helps evaluate how well each model explains the variation in lpsa, while accounting for the number of predictors.
+
+## Viewing Residual Sum of Squares (RSS) for Each Model
+```{r modelMetics2}
+# View residual sum of squares value of each model
+summary(model)$rss
+```
+
+Then displayed the residual sum of squares (RSS) for each model. RSS measures the total squared difference between observed and predicted values, helping assess the fit of each model.
+
+
+##  Finding the Best Model Based on Adjusted R-Squared
+```{r maxMetic}
+modelSum=summary(model)
+which.max(modelSum$adjr2) 
+
+```
+I used which.max() to find the model with the highest adjusted R-squared value, as this model is likely the best at explaining the variance in lpsa.
+
+## Displaying Coefficients of the Best Model
+```{r modelCoef}
+coef(model,which.max(modelSum$adjr2))
+```
+
+Finally, I retrieved the coefficients of the model that has the highest adjusted R-squared value. These coefficients represent how each predictor influences the outcome variable lpsa, providing insight into the strength and direction of these relationships.
+
+## Results
+The linear regression analysis show that the best model, selected based on the highest adjusted R-squared value (65.8%), includes key predictors such as lcavol, lweight, age, lbph, svi, lcp, and pgg45. This indicates that these variables explain approximately 65.8% of the variance in PSA levels (lpsa), after accounting for the number of predictors. The coefficients reveal that variables like lcavol and lweight are positively associated with lpsa, meaning an increase in these factors leads to higher PSA levels. Conversely, age has a negative coefficient, suggesting that older age slightly reduces PSA levels. The residual sum of squares (RSS) decreases as more predictors are included, with the seventh model achieving the lowest RSS, indicating the best fit. Overall, this model effectively captures the relationship between PSA levels and the identified predictors, providing valuable insights into the factors that influence PSA in prostate cancer patients.
